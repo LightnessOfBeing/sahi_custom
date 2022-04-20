@@ -4,6 +4,7 @@ from tqdm import tqdm
 import numpy as np
 import pandas as pd
 import torch
+import argparse
 
 def normalize(features):
     return (features - np.min(features)) / (np.max(features) - np.min(features))
@@ -77,4 +78,10 @@ def prepare(layer_name, fmaps_folder, out_name, mode, alignment_x=0.075, alignme
         raise ValueError("Not implemented!")
 
 if __name__ == "__main__":
-    pass
+    parser = argparse.ArgumentParser(description='Custom SAHI')
+    parser.add_argument('--layer_name', default="stage16_Concat_features.npy", type=str, help='layer name from which feature are coming')
+    parser.add_argument('--fmaps_folder', default="", type=str, help='folder which contains computed feature maps')
+    parser.add_argument('--out_name', default="", type=str, help='output name')
+    parser.add_argument('--mode', default='sparse', type=str, help='way of computing feature maps, two options are available: naive and sparse.')
+    args = parser.parse_args()
+    prepare(layer_name=args.layer_name, fmaps_folder=args.fmaps_folder, out_name=args.out_name, mode=args.mode)
