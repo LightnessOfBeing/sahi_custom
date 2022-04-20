@@ -78,7 +78,7 @@ def prepare(layer_name, fmaps_folder, out_name, mode, alignment_x=0.075, alignme
         raise ValueError("Not implemented!")
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Custom SAHI')
+    parser = argparse.ArgumentParser(description='Custom SAHI preparation')
     parser.add_argument('--layer_name', default="stage16_Concat_features.npy", type=str, help='layer name from which feature are coming')
     parser.add_argument('--fmaps_folder', default="", type=str, help='folder which contains computed feature maps')
     parser.add_argument('--out_name', default="", type=str, help='output name')
