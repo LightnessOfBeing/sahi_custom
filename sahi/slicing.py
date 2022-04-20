@@ -35,6 +35,7 @@ def get_slice_bboxes(
     slice_width: int = 512,
     overlap_height_ratio: int = 0.2,
     overlap_width_ratio: int = 0.2,
+    fmap: np.ndarray = None
 ) -> List[List[int]]:
     """Slices `image_pil` in crops.
     Corner values of each slice will be generated using the `slice_height`,
@@ -74,9 +75,11 @@ def get_slice_bboxes(
                 ymax = min(image_height, y_max)
                 xmin = max(0, xmax - slice_width)
                 ymin = max(0, ymax - slice_height)
-                slice_bboxes.append([xmin, ymin, xmax, ymax])
+                if fmap is None or fmap[ymin: ymax, xmin: xmax].sum() > 0:
+                    slice_bboxes.append([xmin, ymin, xmax, ymax])
             else:
-                slice_bboxes.append([x_min, y_min, x_max, y_max])
+                if fmap is None or fmap[y_min: y_max, x_min: x_max].sum() > 0:
+                    slice_bboxes.append([x_min, y_min, x_max, y_max])
             x_min = x_max - x_overlap
         y_min = y_max - y_overlap
     return slice_bboxes
@@ -236,7 +239,8 @@ def slice_image(
     min_area_ratio: float = 0.1,
     out_ext: Optional[str] = None,
     verbose: bool = False,
-    crop_location: pd.core.series.Series = None 
+    crop_location: pd.core.series.Series = None,
+    fmap: np.ndarray = None
 ) -> SliceImageResult:
 
     """Slice a large image into smaller windows. If output_file_name is given export
@@ -289,21 +293,34 @@ def slice_image(
         Path(output_dir).mkdir(parents=True, exist_ok=True)
 
     # read image
-    image_pil = read_image_as_pil(image).crop((crop_location['xs'], crop_location['ys'], crop_location['xe'], crop_location['ye']))
-    
+    if crop_location is not None:
+        image_pil = read_image_as_pil(image).crop((crop_location['xs'], crop_location['ys'], crop_location['xe'], crop_location['ye']))
+    else:
+        image_pil = read_image_as_pil(image)
     verboselog("image.shape: " + str(image_pil.size))
 
     image_width, image_height = image_pil.size
     if not (image_width != 0 and image_height != 0):
         raise RuntimeError(f"invalid image size: {image_pil.size} for 'slice_image'.")
-    slice_bboxes = get_slice_bboxes(
-        image_height=image_height,
-        image_width=image_width,
-        slice_height=slice_height,
-        slice_width=slice_width,
-        overlap_height_ratio=overlap_height_ratio,
-        overlap_width_ratio=overlap_width_ratio,
-    )
+    if crop_location is not None:
+        slice_bboxes = get_slice_bboxes(
+            image_height=image_height,
+            image_width=image_width,
+            slice_height=slice_height,
+            slice_width=slice_width,
+            overlap_height_ratio=overlap_height_ratio,
+            overlap_width_ratio=overlap_width_ratio,
+        )
+    else:
+        slice_bboxes = get_slice_bboxes(
+            image_height=image_height,
+            image_width=image_width,
+            slice_height=slice_height,
+            slice_width=slice_width,
+            overlap_height_ratio=overlap_height_ratio,
+            overlap_width_ratio=overlap_width_ratio,
+            fmap=fmap
+        )
 
     t0 = time.time()
     n_ims = 0

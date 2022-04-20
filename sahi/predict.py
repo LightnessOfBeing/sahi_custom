@@ -128,7 +128,8 @@ def get_sliced_prediction(
     postprocess_match_threshold: float = 0.5,
     postprocess_class_agnostic: bool = False,
     verbose: int = 1,
-    crop_location: pd.core.series.Series = None
+    crop_location: pd.core.series.Series = None,
+    fmap: np.ndarray = None
 ) -> PredictionResult:
     """
     Function for slice image + get predicion for each slice + combine predictions in full image.
@@ -188,14 +189,24 @@ def get_sliced_prediction(
 
     # create slices from full image
     time_start = time.time()
-    slice_image_result = slice_image(
-        image=image,
-        slice_height=slice_height,
-        slice_width=slice_width,
-        overlap_height_ratio=overlap_height_ratio,
-        overlap_width_ratio=overlap_width_ratio,
-        crop_location=crop_location
-    )
+    if crop_location is not None:
+        slice_image_result = slice_image(
+            image=image,
+            slice_height=slice_height,
+            slice_width=slice_width,
+            overlap_height_ratio=overlap_height_ratio,
+            overlap_width_ratio=overlap_width_ratio,
+            crop_location=crop_location
+        )
+    else:
+        slice_image_result = slice_image(
+            image=image,
+            slice_height=slice_height,
+            slice_width=slice_width,
+            overlap_height_ratio=overlap_height_ratio,
+            overlap_width_ratio=overlap_width_ratio,
+            fmap=fmap
+        )
     num_slices = len(slice_image_result)
     time_end = time.time() - time_start
     durations_in_seconds["slice"] = time_end
@@ -267,11 +278,12 @@ def get_sliced_prediction(
             if object_prediction:  # if not empty
                 object_prediction_list.append(object_prediction.get_shifted_object_prediction())
     
-    for pred in object_prediction_list:
-        pred.bbox.minx += crop_location["xs"]
-        pred.bbox.miny += crop_location["ys"]
-        pred.bbox.maxx += crop_location["xs"]
-        pred.bbox.maxy += crop_location["ys"]
+    if crop_location is not None:
+        for pred in object_prediction_list:
+            pred.bbox.minx += crop_location["xs"]
+            pred.bbox.miny += crop_location["ys"]
+            pred.bbox.maxx += crop_location["xs"]
+            pred.bbox.maxy += crop_location["ys"]
 
     # perform standard prediction
     if num_slices > 1 and perform_standard_pred:
@@ -320,6 +332,7 @@ def get_mask(array: np.ndarray, t: float=0.5):
 
 
 def generate_fmaps(fmaps_path: str, layer_name: str, image_path_list: List[str], alignment_x: float=0.075, alignment_y: float=0.075) -> pd.DataFrame:
+    #print(image_path_list)
     names = [x.split("/")[-1].split(".")[0] for x in image_path_list]
     fmap_path_list = [os.path.join(os.path.join(os.path.join(fmaps_path, name), layer_name)) for name in names]
     xs_arr = []
@@ -399,6 +412,7 @@ def predict(
     verbose: int = 1,
     return_dict: bool = False,
     force_postprocess_type: bool = False,
+    mode: str="naive",
     fmaps_path: str = None,
     fmaps_layer: str = None,
 ):
@@ -502,11 +516,11 @@ def predict(
         image_path_list = [str(Path(source) / Path(coco_image.file_name)) for coco_image in coco.images]
         coco_json = []
     elif os.path.isdir(source):
-        image_path_list = list_files(
+        image_path_list = sorted(list_files(
             directory=source,
             contains=[".jpg", ".jpeg", ".png", ".tiff", ".bmp"],
             verbose=verbose,
-        )
+        ))
     else:
         image_path_list = [source]
 
@@ -541,7 +555,12 @@ def predict(
     durations_in_seconds["prediction"] = 0
     durations_in_seconds["slice"] = 0
 
-    fmaps_df = generate_fmaps(fmaps_path, fmaps_layer, image_path_list)
+    if mode == "naive":
+        fmaps_df = generate_fmaps(fmaps_path, fmaps_layer, image_path_list)
+    elif mode == "sparse":
+        fmaps_arr = np.load(fmaps_path, allow_pickle=True)
+    else:
+        raise ValueError("Not implemented!")
     for ind, image_path in enumerate(tqdm(image_path_list, "Performing inference on images")):
         # get filename
         if os.path.isdir(source):  # preserve source folder structure in export
@@ -556,21 +575,38 @@ def predict(
         # perform prediction
         if not no_sliced_prediction:
             # get sliced prediction
-            prediction_result = get_sliced_prediction(
-                image=image_path,
-                detection_model=detection_model,
-                slice_height=slice_height,
-                slice_width=slice_width,
-                overlap_height_ratio=overlap_height_ratio,
-                overlap_width_ratio=overlap_width_ratio,
-                perform_standard_pred=not no_standard_prediction,
-                postprocess_type=postprocess_type,
-                postprocess_match_metric=postprocess_match_metric,
-                postprocess_match_threshold=postprocess_match_threshold,
-                postprocess_class_agnostic=postprocess_class_agnostic,
-                verbose=1 if verbose else 0,
-                crop_location=fmaps_df.iloc[ind]
-            )
+            if mode == "naive":
+                prediction_result = get_sliced_prediction(
+                    image=image_path,
+                    detection_model=detection_model,
+                    slice_height=slice_height,
+                    slice_width=slice_width,
+                    overlap_height_ratio=overlap_height_ratio,
+                    overlap_width_ratio=overlap_width_ratio,
+                    perform_standard_pred=not no_standard_prediction,
+                    postprocess_type=postprocess_type,
+                    postprocess_match_metric=postprocess_match_metric,
+                    postprocess_match_threshold=postprocess_match_threshold,
+                    postprocess_class_agnostic=postprocess_class_agnostic,
+                    verbose=1 if verbose else 0,
+                    crop_location=fmaps_df.iloc[ind]
+                )
+            elif mode == "sparse":
+                prediction_result = get_sliced_prediction(
+                    image=image_path,
+                    detection_model=detection_model,
+                    slice_height=slice_height,
+                    slice_width=slice_width,
+                    overlap_height_ratio=overlap_height_ratio,
+                    overlap_width_ratio=overlap_width_ratio,
+                    perform_standard_pred=not no_standard_prediction,
+                    postprocess_type=postprocess_type,
+                    postprocess_match_metric=postprocess_match_metric,
+                    postprocess_match_threshold=postprocess_match_threshold,
+                    postprocess_class_agnostic=postprocess_class_agnostic,
+                    verbose=1 if verbose else 0,
+                    fmap=fmaps_arr[ind]
+                )
             object_prediction_list = prediction_result.object_prediction_list
             durations_in_seconds["slice"] += prediction_result.durations_in_seconds["slice"]
         else:
