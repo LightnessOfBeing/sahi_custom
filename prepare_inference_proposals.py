@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 import torch
 import argparse
+import imagesize
 
 def normalize(features):
     return (features - np.min(features)) / (np.max(features) - np.min(features))
@@ -27,19 +28,20 @@ def prepare(layer_name, fmaps_folder, out_name, mode, alignment_x=0.075, alignme
     
     final_arr = []
     for folder, file in tqdm(zip(folders, file_names)):
-        image = cv2.imread(os.path.join(fmaps_folder, f"{folder}.png")) # todo substitute with image file
         filename_arr.append(f"{folder}.png")
-        orig_height, orig_width, _ = image.shape
+        #image = cv2.imread(os.path.join(fmaps_folder, f"{folder}.png")) # todo substitute with image file
+        #orig_height, orig_width, _ = image.shape
+        orig_width, orig_height = imagesize.get(os.path.join(fmaps_folder, f"{folder}.png"))
 
         features = np.load(file).mean(axis=0)
         blurred_features = cv2.blur(features, (3, 3))
         normalized_blurred_features = normalize(blurred_features)
         blurred_features_mask = get_mask(normalized_blurred_features)
-        y, x, h, w = cv2.boundingRect(np.argwhere(blurred_features_mask == 1))
-        final_mask = np.zeros_like(blurred_features_mask)
-        final_mask[y: y + h, x: x + w] = 1
 
         if mode == "naive":
+            y, x, h, w = cv2.boundingRect(np.argwhere(blurred_features_mask == 1))
+            final_mask = np.zeros_like(blurred_features_mask)
+            final_mask[y: y + h, x: x + w] = 1
             x_e = x + w
             y_e = y + h
             f_height, f_width = final_mask.shape
@@ -55,8 +57,6 @@ def prepare(layer_name, fmaps_folder, out_name, mode, alignment_x=0.075, alignme
             imys = int(y * mult_height)
             imxe = int(x * mult_width + w * mult_width) 
             imye = int(y * mult_height + h * mult_height)
-            sp = (int(x * mult_width), int(y * mult_height))
-            ep = (int(x * mult_width + w * mult_width), int(y * mult_height + h * mult_height))
             xs_arr.append(imxs)
             ys_arr.append(imys)
             xe_arr.append(imxe)
@@ -80,8 +80,8 @@ def prepare(layer_name, fmaps_folder, out_name, mode, alignment_x=0.075, alignme
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Custom SAHI preparation')
     parser.add_argument('--layer_name', default="stage16_Concat_features.npy", type=str, help='layer name from which feature are coming')
-    parser.add_argument('--fmaps_folder', default="", type=str, help='folder which contains computed feature maps')
-    parser.add_argument('--out_name', default="", type=str, help='output name')
+    parser.add_argument('--fmaps_folder', default="../SeaDroneSee_challenge/runs/detect/baseline_val_full3/", type=str, help='folder which contains computed feature maps')
+    parser.add_argument('--out_name', default="baseline_val_full", type=str, help='output name')
     parser.add_argument('--mode', default='sparse', type=str, help='way of computing feature maps, two options are available: naive and sparse.')
     args = parser.parse_args()
     prepare(layer_name=args.layer_name, fmaps_folder=args.fmaps_folder, out_name=args.out_name, mode=args.mode)

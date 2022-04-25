@@ -164,4 +164,10 @@ cython_debug/
 .elasticbeanstalk/*
 !.elasticbeanstalk/*.cfg.yml
 !.elasticbeanstalk/*.global.yml
- runs/*
+runs/*
+artifacts/*
+checkpoints/*
+ground_truth/*
+pickles_to_text/*
+results/*
+wandb/*

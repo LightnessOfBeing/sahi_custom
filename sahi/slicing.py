@@ -239,6 +239,7 @@ def slice_image(
     min_area_ratio: float = 0.1,
     out_ext: Optional[str] = None,
     verbose: bool = False,
+    mode: str = 'standard',
     crop_location: pd.core.series.Series = None,
     fmap: np.ndarray = None
 ) -> SliceImageResult:
@@ -293,7 +294,7 @@ def slice_image(
         Path(output_dir).mkdir(parents=True, exist_ok=True)
 
     # read image
-    if crop_location is not None:
+    if mode == "naive":
         image_pil = read_image_as_pil(image).crop((crop_location['xs'], crop_location['ys'], crop_location['xe'], crop_location['ye']))
     else:
         image_pil = read_image_as_pil(image)
@@ -302,7 +303,7 @@ def slice_image(
     image_width, image_height = image_pil.size
     if not (image_width != 0 and image_height != 0):
         raise RuntimeError(f"invalid image size: {image_pil.size} for 'slice_image'.")
-    if crop_location is not None:
+    if mode == 'naive' or mode == 'standard':
         slice_bboxes = get_slice_bboxes(
             image_height=image_height,
             image_width=image_width,
@@ -311,7 +312,7 @@ def slice_image(
             overlap_height_ratio=overlap_height_ratio,
             overlap_width_ratio=overlap_width_ratio,
         )
-    else:
+    elif mode == 'sparse':
         slice_bboxes = get_slice_bboxes(
             image_height=image_height,
             image_width=image_width,
@@ -321,6 +322,7 @@ def slice_image(
             overlap_width_ratio=overlap_width_ratio,
             fmap=fmap
         )
+
 
     t0 = time.time()
     n_ims = 0
